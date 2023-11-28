@@ -2,26 +2,25 @@ import logging
 import logging.handlers
 import concurrent.futures
 import multiprocessing
-import subprocess
+from filelock import FileLock  # Import FileLock for file locking
 
 # Initialize the logger
 logger = multiprocessing.get_logger()
 logger.setLevel(logging.INFO)
 
-# Create a QueueHandler to send log records to a Queue
-log_queue = multiprocessing.Queue(-1)  # Use an unlimited size Queue
-queue_handler = logging.handlers.QueueHandler(log_queue)
+# Set up a FileHandler with a FileLock for exclusive access to the log file
+log_file = 'shared_log.txt'  # Change to your desired log file path
+file_handler = logging.handlers.FileHandler(log_file)
+file_lock = FileLock(log_file)  # Create a FileLock for the log file
+file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
 
-# Configure the logger
-logger.addHandler(queue_handler)
+# Add the FileHandler to the logger
+logger.addHandler(file_handler)
 
 # Log listener function to handle logs from the Queue
 def log_listener():
     root = logging.getLogger()
-    handler = logging.StreamHandler()  # You can change this to a FileHandler to log to a file
-    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-    handler.setFormatter(formatter)
-    root.addHandler(handler)
+    root.addHandler(logging.StreamHandler())  # Output logs to console
 
     while True:
         try:
@@ -37,9 +36,10 @@ log_listener_process = multiprocessing.Process(target=log_listener)
 log_listener_process.start()
 
 def process_task(task):
-    # Perform the task and log
+    # Perform the task and log using the logger with FileHandler and FileLock
     result = task * 2
-    logger.info(f"Task: {task}, Result: {result}")
+    with file_lock:  # Acquire the file lock before writing to the log file
+        logger.info(f"Task: {task}, Result: {result}")
 
 if __name__ == "__main__":
     tasks = [1, 2, 3, 4, 5]  # Example tasks
